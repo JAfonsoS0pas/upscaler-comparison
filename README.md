@@ -3,9 +3,15 @@
 Interactive comparison of AI image-upscaling models for product photography, to help decide
 whether a model/service would improve quality over our current production setup (**AuraSR v2**).
 
+## ▶ Live viewer
+
+**https://jafonsos0pas.github.io/upscaler-comparison/**
+
+No install or login needed — opens straight into the gallery.
+
 ## How to view
 
-- **Live:** open the GitHub Pages URL (Settings → Pages, once enabled).
+- **Live:** use the link above.
 - **Locally:** clone the repo and open `viewer.html` in a browser — no server or build needed.
 
 ### Using the viewer
