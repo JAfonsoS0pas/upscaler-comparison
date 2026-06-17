@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upscaler Model Comparison</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --border: #2e2e2e;
+    --text: #e0e0e0;
+    --muted: #777;
+    --accent: #4f9eff;
+    --accent2: #b08cff;
+    --hover: #252525;
+    --radius: 8px;
+  }
+
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; font-size: 14px; overflow: hidden; }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 10px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; height: 56px;
+  }
+  header h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
+  .model-filters { display: flex; gap: 6px; flex-wrap: wrap; max-width: 60vw; overflow-x: auto; }
+  .model-filters label {
+    display: flex; align-items: center; gap: 5px; cursor: pointer;
+    padding: 3px 9px; border-radius: 20px; border: 1px solid var(--border);
+    transition: border-color .15s, background .15s; font-size: 12px; white-space: nowrap;
+  }
+  .model-filters label:hover { border-color: var(--accent); }
+  .model-filters label:has(input:checked) { border-color: var(--accent); background: #1a2a3a; }
+  .model-filters label:has(input:checked) span { color: var(--accent); }
+  .header-spacer { margin-left: auto; }
+  .btn {
+    background: var(--hover); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 13px; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn-accent { border-color: #253a5a; background: #1a2a3a; color: var(--accent); }
+
+  /* ── Layout ── */
+  .layout { display: flex; height: calc(100vh - 56px); }
+
+  /* ── Sidebar ── */
+  aside {
+    width: 220px; flex-shrink: 0; overflow-y: auto;
+    border-right: 1px solid var(--border); background: var(--surface);
+  }
+  .cat-header {
+    padding: 10px 14px 6px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+    position: sticky; top: 0; background: var(--surface); z-index: 1;
+  }
+  .thumb-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 14px; cursor: pointer; border-left: 3px solid transparent;
+    transition: background .1s, border-color .1s;
+  }
+  .thumb-item:hover { background: var(--hover); }
+  .thumb-item.active { background: var(--hover); border-left-color: var(--accent); }
+  .thumb-item img { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; flex-shrink: 0; background: #333; }
+  .thumb-item .label { font-size: 12px; line-height: 1.3; }
+
+  /* ── Main content ── */
+  main { flex: 1; overflow-y: auto; padding: 18px 20px 40px; }
+  .selected-title { font-size: 18px; font-weight: 600; margin-bottom: 2px; }
+  .selected-meta  { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+  .selected-meta b { color: var(--accent); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; cursor: pointer; transition: border-color .15s, transform .1s; position: relative;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .card.missing { cursor: default; opacity: .55; }
+  .card.missing:hover { border-color: var(--border); transform: none; }
+  .card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #1e1e1e; }
+  .card .caption {
+    padding: 8px 10px; font-size: 12px; font-weight: 500;
+    border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 6px;
+  }
+  .card .caption .sub { color: var(--muted); font-size: 10px; font-weight: 400; }
+  .badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+  .badge-original { background: #2a3a2a; color: #7ec87e; border: 1px solid #3a5a3a; }
+  .badge-creative { background: #3a2f1a; color: #d6a85a; border: 1px solid #5a4a2a; }
+  .badge-missing  { background: #3a2a2a; color: #cc7777; border: 1px solid #5a3a3a; }
+
+  /* pick state */
+  .card.pick-a { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .card.pick-b { border-color: var(--accent2); box-shadow: 0 0 0 2px var(--accent2) inset; }
+  .pick-tag {
+    position: absolute; top: 8px; left: 8px; z-index: 2;
+    width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #06203f;
+  }
+  .pick-tag.a { background: var(--accent); }
+  .pick-tag.b { background: var(--accent2); }
+
+  /* ── Compare bar (selection tray) ── */
+  .compare-bar {
+    position: sticky; top: -18px; z-index: 5; margin: -2px 0 14px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .compare-bar .slot { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .slot .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .slot .dot.a { background: var(--accent); } .slot .dot.b { background: var(--accent2); }
+  .slot .val { color: var(--muted); } .slot .val.set { color: var(--text); font-weight: 600; }
+  .compare-bar .hint { color: var(--muted); font-size: 12px; }
+
+  /* ── Empty state ── */
+  .empty { color: var(--muted); padding: 60px 20px; text-align: center; }
+  .empty p { margin-top: 8px; font-size: 13px; }
+
+  /* ── Overlay base (slider + pricing) ── */
+  .overlay { display: none; position: fixed; inset: 0; z-index: 200; background: #0a0a0a; flex-direction: column; }
+  .overlay.open { display: flex; }
+  .ov-bar {
+    flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 16px; height: 54px; display: flex; align-items: center; gap: 12px;
+  }
+  .ov-title { font-size: 15px; font-weight: 600; white-space: nowrap; }
+  .ov-close {
+    margin-left: auto; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center;
+    justify-content: center; border-radius: 6px; font-size: 22px; color: var(--muted);
+  }
+  .ov-close:hover { background: var(--hover); color: var(--text); }
+
+  /* selectors inside slider */
+  .sel-group { display: flex; align-items: center; gap: 6px; }
+  .sel-group .tag { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+  .tag-left  { background: #1a2a3a; color: var(--accent); border: 1px solid #253a5a; }
+  .tag-right { background: #2a1a3a; color: var(--accent2); border: 1px solid #3a2a5a; }
+  select { background: #111; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px; max-width: 200px; cursor: pointer; }
+  select:hover { border-color: var(--accent); }
+  .zoom-ctrl { display: flex; align-items: center; gap: 8px; }
+  .zoom-ctrl input[type=range] { width: 120px; accent-color: var(--accent); cursor: pointer; }
+  .zoom-ctrl .zlabel { font-size: 12px; color: var(--muted); min-width: 92px; }
+
+  /* slider viewport */
+  .viewport {
+    flex: 1; overflow: auto; min-height: 0; position: relative;
+    background: repeating-conic-gradient(#161616 0% 25%, #1c1c1c 0% 50%) 50% / 24px 24px;
+  }
+  .viewport.grabbing { cursor: grabbing; }
+  .stage { position: relative; margin: 0 auto; user-select: none; }
+  .stage img { position: absolute; top: 0; left: 0; height: 100%; display: block; pointer-events: none; }
+  .img-right { z-index: 1; }
+  .clip { position: absolute; top: 0; left: 0; height: 100%; overflow: hidden; z-index: 2; will-change: width; }
+  .clip img { z-index: 2; }
+  .divider { position: absolute; top: 0; height: 100%; width: 2px; background: var(--accent); z-index: 5; transform: translateX(-1px); cursor: ew-resize; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
+  .divider::before { content: ""; position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; transform: translate(-50%,-50%); background: var(--accent); border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .divider::after { content: "⟺"; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); color: #06203f; font-size: 16px; font-weight: 700; }
+  .stage-label { position: absolute; top: 10px; z-index: 6; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; background: rgba(10,10,10,.7); pointer-events: none; white-space: nowrap; }
+  .stage-label.left  { left: 10px;  color: var(--accent); border: 1px solid #253a5a; }
+  .stage-label.right { right: 10px; color: var(--accent2); border: 1px solid #3a2a5a; }
+
+  /* ── Pricing panel ── */
+  .pricing-body { flex: 1; overflow-y: auto; padding: 24px 32px; }
+  .pricing-body h2 { font-size: 18px; margin-bottom: 4px; }
+  .pricing-body p.note { color: var(--muted); font-size: 13px; margin-bottom: 18px; max-width: 760px; }
+  table.price { border-collapse: collapse; width: 100%; max-width: 880px; margin-bottom: 28px; font-size: 13px; }
+  table.price th, table.price td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  table.price th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  table.price td.num { font-variant-numeric: tabular-nums; }
+  .pill { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+  .pill-firm { background: #1a3a1a; color: #7ec87e; border: 1px solid #2a5a2a; }
+  .pill-est  { background: #3a2f1a; color: #d6a85a; border: 1px solid #5a4a2a; }
+  .pricing-body small { color: #666; }
+  .pricing-body a { color: var(--accent); }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: #0c0c0c; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #444; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Upscaler Comparison</h1>
+  <div class="model-filters" id="modelFilters"></div>
+  <div class="header-spacer"></div>
+  <button class="btn" id="pricingBtn">💲 Pricing</button>
+</header>
+
+<div class="layout">
+  <aside id="sidebar"></aside>
+  <main id="main">
+    <div class="empty"><div style="font-size:36px">🖼️</div><p>Select an image from the sidebar.</p></div>
+  </main>
+</div>
+
+<!-- ── Slider overlay ── -->
+<div class="overlay" id="slider">
+  <div class="ov-bar">
+    <div class="sel-group"><span class="tag tag-left">Left</span><select id="leftSel"></select></div>
+    <button class="btn" id="swapBtn" title="Swap">⇄</button>
+    <div class="sel-group"><span class="tag tag-right">Right</span><select id="rightSel"></select></div>
+    <div class="zoom-ctrl" style="margin-left:24px">
+      <button class="btn" id="fitBtn">Fit</button>
+      <button class="btn" id="oneToOne">1:1</button>
+      <input type="range" id="zoom" min="1" max="8" step="0.1" value="1">
+      <span class="zlabel" id="zlabel">Fit</span>
+    </div>
+    <span class="ov-close" id="sliderClose">×</span>
+  </div>
+  <div class="viewport" id="viewport">
+    <div class="stage" id="stage" style="display:none">
+      <img class="img-right" id="imgRight" alt="right">
+      <div class="clip" id="clip"><img id="imgLeft" alt="left"></div>
+      <div class="stage-label left"  id="labLeft"></div>
+      <div class="stage-label right" id="labRight"></div>
+      <div class="divider" id="divider"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Pricing overlay ── -->
+<div class="overlay" id="pricing">
+  <div class="ov-bar">
+    <span class="ov-title">💲 Pricing — fal vs direct</span>
+    <span class="ov-close" id="pricingClose">×</span>
+  </div>
+  <div class="pricing-body" id="pricingBody"></div>
+</div>
+
+<script>
+// ── Images ──
+const IMAGES = [
+  { file: "fabric_velvet.jpg",            category: "fabric",    label: "Velvet texture" },
+  { file: "fabric_knit.jpg",              category: "fabric",    label: "Knit / wool" },
+  { file: "fabric_satin.jpg",             category: "fabric",    label: "Satin / silk" },
+  { file: "fabric_woven.jpg",             category: "fabric",    label: "Woven textile" },
+  { file: "fabric_linen.jpg",             category: "fabric",    label: "Linen / cotton" },
+  { file: "fabric_canvas.jpg",            category: "fabric",    label: "Canvas close-up" },
+  { file: "fabric_carpet_packshot.jpg",   category: "fabric",    label: "Carpet packshot (ref)" },
+  { file: "fabric_carpet_red.jpg",        category: "fabric",    label: "Carpet (red/tan)" },
+  { file: "fabric_carpet_green.jpg",      category: "fabric",    label: "Carpet (green)" },
+  { file: "wearing_sweater_1.jpg",        category: "wearing",   label: "Sweater texture (white)" },
+  { file: "wearing_sweater_2.jpg",        category: "wearing",   label: "Sweater texture (grey)" },
+  { file: "wearing_coat_black.jpg",       category: "wearing",   label: "Wool coat (black)" },
+  { file: "wearing_coat_beige.jpg",       category: "wearing",   label: "Coat (beige)" },
+  { file: "wearing_jacket_textured.jpg",  category: "wearing",   label: "Textured jacket" },
+  { file: "fashion_sneakers.jpg",         category: "fashion",   label: "Sneakers" },
+  { file: "fashion_watch.jpg",            category: "fashion",   label: "Watch" },
+  { file: "fashion_handbag.jpg",          category: "fashion",   label: "Leather handbag" },
+  { file: "fashion_sunglasses.jpg",       category: "fashion",   label: "Sunglasses" },
+  { file: "home_chairs.jpg",              category: "home",      label: "Modern chairs" },
+  { file: "home_armchair.jpg",            category: "home",      label: "Armchair" },
+  { file: "appliance_juicer.jpg",         category: "appliance", label: "Juicer" },
+  { file: "appliance_fridge.jpg",         category: "appliance", label: "Refrigerator" },
+  { file: "appliance_washer_1.jpg",       category: "appliance", label: "Washing machine" },
+  { file: "appliance_washer_2.jpg",       category: "appliance", label: "Washing machine (front)" },
+  { file: "tech_headphones.jpg",          category: "tech",      label: "Headphones (flat lay)" },
+  { file: "tech_headphones_blk.jpg",      category: "tech",      label: "Headphones (black)" },
+  { file: "tech_smartphone.jpg",          category: "tech",      label: "Smartphone" },
+  { file: "tech_laptop_1.jpg",            category: "tech",      label: "Laptop (silver)" },
+  { file: "tech_laptop_2.jpg",            category: "tech",      label: "Laptop (white desk)" },
+  { file: "tech_powerbank.jpg",           category: "tech",      label: "Power bank" },
+  { file: "lifestyle_flatlay.jpg",        category: "lifestyle", label: "Outfit flat lay" },
+  { file: "lifestyle_couple_outdoor.jpg", category: "lifestyle", label: "Couple outdoors" },
+  { file: "lifestyle_street_fashion.jpg", category: "lifestyle", label: "Street fashion" },
+];
+
+const ORIGINAL = { slug: "__original__", label: "Original", provider: "—", kind: "original" };
+
+// Data-driven. `falPrice` = approx per-image (4096²/16.8MP) on fal. `firm` flags published numbers.
+const MODELS = [
+  { slug: "aura-sr-v2",          label: "AuraSR v2 (prod)", provider: "fal", kind: "faithful", falPrice: "~$0.01" },
+  { slug: "aura-sr-v1",          label: "AuraSR v1",        provider: "fal", kind: "faithful", falPrice: "~$0.01" },
+  { slug: "esrgan-x4plus",       label: "ESRGAN x4+",       provider: "fal", kind: "faithful", falPrice: "~$0.01" },
+  { slug: "esrgan-x4plus-anime", label: "ESRGAN Anime",     provider: "fal", kind: "faithful", falPrice: "~$0.01" },
+  { slug: "esrgan-x4-v3",        label: "ESRGAN v3",        provider: "fal", kind: "faithful", falPrice: "~$0.01" },
+  { slug: "esrgan-x4-wdn-v3",    label: "ESRGAN WDN v3",    provider: "fal", kind: "faithful", falPrice: "~$0.01" },
+  { slug: "esrgan-x4-anime-v3",  label: "ESRGAN Anime v3",  provider: "fal", kind: "faithful", falPrice: "~$0.01" },
+  { slug: "clarity-upscaler",    label: "Clarity",          provider: "fal", kind: "creative", falPrice: "~$0.05" },
+  { slug: "topaz-hifi",          label: "Topaz High-Fidelity", provider: "fal", kind: "faithful", falPrice: "$0.08", firm: true },
+  { slug: "topaz-standard",      label: "Topaz Standard",      provider: "fal", kind: "faithful", falPrice: "$0.08", firm: true },
+  { slug: "topaz-standard-max",  label: "Topaz Standard MAX",  provider: "fal", kind: "faithful", falPrice: "$0.08", firm: true },
+  { slug: "drct",                label: "DRCT",                provider: "fal", kind: "faithful", falPrice: "~$0.03" },
+  { slug: "recraft-crisp",       label: "Recraft Crisp",       provider: "fal", kind: "faithful", falPrice: "~$0.03" },
+  { slug: "seedvr2",             label: "SeedVR2",             provider: "fal", kind: "faithful", falPrice: "~$0.04" },
+];
+
+const ORIG_DIR = "test-images/";
+const RESULTS_DIR = "results/";
+
+const CATEGORY_LABELS = {
+  fabric: "🧵 Fabric & Textiles", wearing: "🧥 Wearing Textured Clothes",
+  fashion: "👜 Fashion & Accessories", home: "🏠 Home & Furniture",
+  appliance: "🔧 Appliances", tech: "💻 Tech & Electronics", lifestyle: "✨ Lifestyle",
+};
+
+const SOURCES = [ORIGINAL, ...MODELS];
+const sourceBySlug = s => SOURCES.find(x => x.slug === s);
+const srcPath = (s, file) => s.slug === ORIGINAL.slug ? `${ORIG_DIR}${file}` : `${RESULTS_DIR}${s.slug}__${file}`;
+
+// ── State ──
+let activeImage  = null;
+let activeModels = new Set(MODELS.map(m => m.slug));
+let picks = [];   // up to 2 source slugs chosen in the gallery
+
+// ── Sidebar ──
+function buildSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  [...new Set(IMAGES.map(i => i.category))].forEach(cat => {
+    const hdr = document.createElement("div");
+    hdr.className = "cat-header"; hdr.textContent = CATEGORY_LABELS[cat] || cat;
+    sidebar.appendChild(hdr);
+    IMAGES.filter(i => i.category === cat).forEach(img => {
+      const item = document.createElement("div");
+      item.className = "thumb-item"; item.dataset.file = img.file;
+      item.innerHTML = `<img src="${ORIG_DIR}${img.file}" alt="${img.label}" loading="lazy"><span class="label">${img.label}</span>`;
+      item.addEventListener("click", () => selectImage(img));
+      sidebar.appendChild(item);
+    });
+  });
+}
+
+// ── Model filters ──
+function buildFilters() {
+  const c = document.getElementById("modelFilters");
+  MODELS.forEach(m => {
+    const lbl = document.createElement("label");
+    lbl.innerHTML = `<input type="checkbox" checked value="${m.slug}"><span>${m.label}</span>`;
+    lbl.querySelector("input").addEventListener("change", e => {
+      if (e.target.checked) activeModels.add(m.slug); else activeModels.delete(m.slug);
+      if (activeImage) renderGallery();
+    });
+    c.appendChild(lbl);
+  });
+}
+
+// ── Gallery ──
+function selectImage(img) {
+  activeImage = img;
+  picks = [];
+  document.querySelectorAll(".thumb-item").forEach(el => el.classList.toggle("active", el.dataset.file === img.file));
+  renderGallery();
+}
+
+function renderGallery() {
+  const main = document.getElementById("main");
+  const visible = MODELS.filter(m => activeModels.has(m.slug));
+  main.innerHTML = `
+    <div class="selected-title">${activeImage.label}</div>
+    <div class="selected-meta">${activeImage.file} &bull; ${activeImage.category} &bull; pick <b>two tiles</b> (Original counts) to open the comparison slider</div>
+    <div class="compare-bar" id="compareBar"></div>
+    <div class="grid" id="grid"></div>`;
+  renderCompareBar();
+  const grid = document.getElementById("grid");
+  grid.appendChild(makeCard(ORIGINAL));
+  visible.forEach(m => grid.appendChild(makeCard(m)));
+}
+
+function renderCompareBar() {
+  const bar = document.getElementById("compareBar");
+  if (!bar) return;
+  const name = i => picks[i] ? sourceBySlug(picks[i]).label : "—";
+  bar.innerHTML = `
+    <div class="slot"><span class="dot a"></span><span class="val ${picks[0]?'set':''}">A: ${name(0)}</span></div>
+    <div class="slot"><span class="dot b"></span><span class="val ${picks[1]?'set':''}">B: ${name(1)}</span></div>
+    <span class="hint">${picks.length < 2 ? "select another tile to compare" : "comparing…"}</span>
+    ${picks.length ? '<button class="btn" id="clearPicks">Clear</button>' : ''}
+    ${picks.length === 2 ? '<button class="btn btn-accent" id="openCmp">Open slider ▶</button>' : ''}`;
+  const clr = document.getElementById("clearPicks");
+  if (clr) clr.addEventListener("click", () => { picks = []; renderGallery(); });
+  const op = document.getElementById("openCmp");
+  if (op) op.addEventListener("click", () => openSlider(picks[0], picks[1]));
+}
+
+function makeCard(source) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const pi = picks.indexOf(source.slug);
+  if (pi === 0) card.classList.add("pick-a");
+  if (pi === 1) card.classList.add("pick-b");
+
+  const img = document.createElement("img");
+  img.loading = "lazy"; img.alt = source.label;
+  img.src = srcPath(source, activeImage.file);
+
+  const cap = document.createElement("div");
+  cap.className = "caption";
+  const left = document.createElement("span");
+  left.innerHTML = `${source.label}${source.slug !== ORIGINAL.slug ? `<br><span class="sub">${source.provider}${source.falPrice ? " · " + source.falPrice : ""}</span>` : ""}`;
+  const badge = document.createElement("span");
+  badge.className = "badge";
+
+  if (source.slug === ORIGINAL.slug) { badge.className += " badge-original"; badge.textContent = "ORIGINAL"; }
+  else if (source.kind === "creative") { badge.className += " badge-creative"; badge.textContent = "CREATIVE"; }
+
+  if (pi >= 0) {
+    const tag = document.createElement("div");
+    tag.className = "pick-tag " + (pi === 0 ? "a" : "b");
+    tag.textContent = pi === 0 ? "A" : "B";
+    card.appendChild(tag);
+  }
+
+  img.onerror = () => {
+    img.src = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><rect width='240' height='240' fill='%231a1a1a'/><text x='50%25' y='50%25' font-family='monospace' font-size='12' fill='%23555' text-anchor='middle' dy='.3em'>not yet run</text></svg>";
+    badge.className = "badge badge-missing"; badge.textContent = "MISSING";
+    card.classList.add("missing");
+  };
+
+  cap.appendChild(left); cap.appendChild(badge);
+  card.appendChild(img); card.appendChild(cap);
+  card.addEventListener("click", () => { if (!card.classList.contains("missing")) pickSource(source.slug); });
+  return card;
+}
+
+function pickSource(slug) {
+  const i = picks.indexOf(slug);
+  if (i >= 0) picks.splice(i, 1);            // toggle off
+  else if (picks.length < 2) picks.push(slug);
+  else picks = [slug];                       // start over on a fresh 3rd pick
+  if (picks.length === 2) { renderGallery(); openSlider(picks[0], picks[1]); }
+  else renderGallery();
+}
+
+// ── Slider ──
+const E = {};
+["viewport","stage","imgLeft","imgRight","clip","divider","labLeft","labRight",
+ "leftSel","rightSel","swapBtn","zoom","zlabel","fitBtn","oneToOne"].forEach(id => E[id] = document.getElementById(id));
+
+let leftSlug, rightSlug, zoomMul = 1, split = 0.5, baseW = 0, baseH = 0, pending = 0;
+
+function buildSelectors() {
+  const opts = SOURCES.map(s => `<option value="${s.slug}">${s.label}</option>`).join("");
+  E.leftSel.innerHTML = opts; E.rightSel.innerHTML = opts;
+  E.leftSel.addEventListener("change",  e => { leftSlug = e.target.value; loadPair(); });
+  E.rightSel.addEventListener("change", e => { rightSlug = e.target.value; loadPair(); });
+  E.swapBtn.addEventListener("click", () => { [leftSlug, rightSlug] = [rightSlug, leftSlug]; E.leftSel.value = leftSlug; E.rightSel.value = rightSlug; loadPair(); });
+}
+
+function openSlider(a, b) {
+  leftSlug = a; rightSlug = b; zoomMul = 1; split = 0.5;
+  E.leftSel.value = a; E.rightSel.value = b;
+  document.getElementById("slider").classList.add("open");
+  loadPair();
+}
+function closeSlider() { document.getElementById("slider").classList.remove("open"); }
+
+function loadPair() {
+  const left = sourceBySlug(leftSlug), right = sourceBySlug(rightSlug);
+  E.stage.style.display = "";
+  baseW = baseH = 0; pending = 2;
+  loadInto(E.imgLeft, left); loadInto(E.imgRight, right);
+}
+function loadInto(imgEl, source) {
+  imgEl.onload = () => { baseW = Math.max(baseW, imgEl.naturalWidth); baseH = Math.max(baseH, imgEl.naturalHeight); if (--pending <= 0) applyLayout(true); updateMeta(); };
+  imgEl.onerror = () => { if (--pending <= 0) applyLayout(true); updateMeta(); };
+  imgEl.src = srcPath(source, activeImage.file);
+}
+function updateMeta() {
+  const left = sourceBySlug(leftSlug), right = sourceBySlug(rightSlug);
+  const dim = (img, s) => s.slug === ORIGINAL.slug ? "1024²" : (img.naturalWidth ? `${img.naturalWidth}×${img.naturalHeight}` : "not run");
+  E.labLeft.textContent  = `${left.label}  ·  ${dim(E.imgLeft, left)}`;
+  E.labRight.textContent = `${right.label}  ·  ${dim(E.imgRight, right)}`;
+}
+// "Fit" = whole image visible: scale so both width AND height fit the viewport.
+function fitScale() { return baseW ? Math.min(E.viewport.clientWidth / baseW, E.viewport.clientHeight / baseH) : 1; }
+function applyLayout(reset) {
+  if (!baseW) return;
+  const stageW = baseW * fitScale() * zoomMul, stageH = baseH * (stageW / baseW);
+  E.stage.style.width = stageW + "px"; E.stage.style.height = stageH + "px";
+  E.imgLeft.style.width = stageW + "px"; E.imgRight.style.width = stageW + "px";
+  applySplit(); updateZoomLabel();
+  if (reset) { E.viewport.scrollLeft = 0; E.viewport.scrollTop = 0; }
+}
+function applySplit() { E.clip.style.width = (split * 100) + "%"; E.divider.style.left = (split * 100) + "%"; }
+function updateZoomLabel() {
+  const one = baseW ? 1 / fitScale() : 1;
+  E.zlabel.textContent = `${zoomMul.toFixed(1)}× · ${Math.round(zoomMul / one * 100)}% px`;
+}
+function setZoom(mul, anchor) {
+  const vp = E.viewport, ax = anchor ? anchor.x : vp.clientWidth / 2, ay = anchor ? anchor.y : vp.clientHeight / 2;
+  const beforeW = baseW * fitScale() * zoomMul || 1;
+  const fx = (vp.scrollLeft + ax) / beforeW, fy = (vp.scrollTop + ay) / (beforeW * (baseH / baseW || 1));
+  zoomMul = Math.max(1, Math.min(8, mul)); E.zoom.value = zoomMul; applyLayout(false);
+  const afterW = baseW * fitScale() * zoomMul;
+  vp.scrollLeft = fx * afterW - ax; vp.scrollTop = fy * (afterW * (baseH / baseW || 1)) - ay;
+}
+
+let draggingDivider = false;
+E.divider.addEventListener("pointerdown", e => { draggingDivider = true; E.divider.setPointerCapture(e.pointerId); e.preventDefault(); });
+E.divider.addEventListener("pointermove", e => { if (draggingDivider) { const r = E.stage.getBoundingClientRect(); split = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); applySplit(); } });
+E.divider.addEventListener("pointerup", () => draggingDivider = false);
+
+let panning = false, panStart = null;
+E.viewport.addEventListener("pointerdown", e => { if (e.target === E.divider) return; panning = true; panStart = { x: e.clientX, y: e.clientY, sl: E.viewport.scrollLeft, st: E.viewport.scrollTop }; E.viewport.classList.add("grabbing"); E.viewport.setPointerCapture(e.pointerId); });
+E.viewport.addEventListener("pointermove", e => { if (!panning) return; E.viewport.scrollLeft = panStart.sl - (e.clientX - panStart.x); E.viewport.scrollTop = panStart.st - (e.clientY - panStart.y); });
+E.viewport.addEventListener("pointerup", () => { panning = false; E.viewport.classList.remove("grabbing"); });
+E.viewport.addEventListener("wheel", e => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); const r = E.viewport.getBoundingClientRect(); setZoom(zoomMul * (e.deltaY < 0 ? 1.15 : 0.87), { x: e.clientX - r.left, y: e.clientY - r.top }); }, { passive: false });
+E.zoom.addEventListener("input", e => setZoom(parseFloat(e.target.value)));
+E.fitBtn.addEventListener("click", () => setZoom(1));
+E.oneToOne.addEventListener("click", () => setZoom(baseW ? 1 / fitScale() : 1));
+document.getElementById("sliderClose").addEventListener("click", closeSlider);
+window.addEventListener("resize", () => { if (document.getElementById("slider").classList.contains("open")) applyLayout(false); });
+
+// ── Keyboard ──
+document.addEventListener("keydown", e => {
+  const sliderOpen = document.getElementById("slider").classList.contains("open");
+  const pricingOpen = document.getElementById("pricing").classList.contains("open");
+  if (e.key === "Escape") { if (sliderOpen) closeSlider(); if (pricingOpen) document.getElementById("pricing").classList.remove("open"); return; }
+  if (sliderOpen || pricingOpen) return;
+  if (!activeImage) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const idx = IMAGES.findIndex(i => i.file === activeImage.file);
+    selectImage(IMAGES[(idx + (e.key === "ArrowDown" ? 1 : -1) + IMAGES.length) % IMAGES.length]);
+  }
+});
+
+// ── Pricing panel ──
+function buildPricing() {
+  const fmt = (rows) => rows.map(r => `<tr>${r.map((c,i)=>`<td class="${i>0?'num':''}">${c}</td>`).join("")}</tr>`).join("");
+  const perModel = MODELS.map(m => [
+    m.label, m.provider, m.falPrice || "—",
+    m.firm ? '<span class="pill pill-firm">published</span>' : '<span class="pill pill-est">estimate</span>'
+  ]);
+  document.getElementById("pricingBody").innerHTML = `
+    <h2>Per-image cost on fal</h2>
+    <p class="note">Approx. per image at our test size (1024² → 4096², ~16.8 MP output). Only the Topaz tier is a
+      <b>published</b> figure; fal bills the others by GPU-time, which varies per image, so those are estimates.
+      Your <a href="https://fal.ai/dashboard/billing" target="_blank">fal billing dashboard</a> shows exact per-request charges.</p>
+    <table class="price"><thead><tr><th>Model</th><th>Provider</th><th>~ / image</th><th>Confidence</th></tr></thead>
+      <tbody>${fmt(perModel)}</tbody></table>
+
+    <h2>fal vs going direct</h2>
+    <p class="note">fal is zero-setup on one key but adds a convenience markup. Going direct is cheaper but needs its own
+      funded account. Numbers are per ~16.8 MP output image.</p>
+    <table class="price"><thead><tr><th>Service / model</th><th>via fal</th><th>direct (native)</th><th>Notes</th></tr></thead>
+      <tbody>${fmt([
+        ["Topaz High-Fidelity", "$0.08 <span class='pill pill-firm'>firm</span>", "~$0.046 <span class='pill pill-est'>est</span>", "direct ≈ 0.7 credit × ~$0.066; cheaper at volume tiers"],
+        ["ESRGAN / AuraSR", "~$0.01", "Replicate real-esrgan ~$0.004", "cheap GAN either way"],
+        ["SwinIR", "n/a (not on fal)", "Replicate ~$0.032", "DRCT on fal supersedes it"],
+        ["Stability Conservative", "n/a", "~$0.25–0.40", "faithful, simple REST"],
+      ])}</tbody></table>
+    <p class="note"><b>Takeaway:</b> for one-off comparison runs, fal's convenience is worth the small premium. For ongoing
+      production use of a specific model (e.g. Topaz), load credits on the native API — it's ~40% cheaper and drops with volume.
+      <br><small>Direct accounts need billing set up first (an API key alone returns "no subscription / insufficient credit").</small></p>`;
+}
+document.getElementById("pricingBtn").addEventListener("click", () => { document.getElementById("pricing").classList.add("open"); });
+document.getElementById("pricingClose").addEventListener("click", () => document.getElementById("pricing").classList.remove("open"));
+
+// ── Init ──
+buildFilters(); buildSidebar(); buildSelectors(); buildPricing();
+if (IMAGES.length) selectImage(IMAGES[0]);
+</script>
+</body>
+</html>
